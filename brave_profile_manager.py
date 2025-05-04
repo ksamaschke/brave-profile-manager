@@ -34,8 +34,6 @@ import json
 from pathlib import Path
 import sys
 import subprocess
-import shutil
-import glob
 import re
 
 def clear_screen():
@@ -100,58 +98,32 @@ def find_brave_profile_launchers():
             with open(desktop_path, 'r', encoding='utf-8') as file:
                 content = file.read()
                 
-                # First check if it's a Brave-related file
+                # Check if it's a Brave-related file
                 if "brave" not in content.lower():
                     continue
                 
-                is_profile_launcher = False
-                profile_id = "default"
-                profile_name = "Unknown"
-                
-                # Check multiple patterns for Brave profile launchers
-                # 1. Check for the generic script pattern
-                generic_script_match = re.search(r'Exec=.*?brave-profile-launcher\.sh\s+["\']?(.*?)["\']?(\s|$)', content)
-                if generic_script_match:
-                    is_profile_launcher = True
-                    profile_id = generic_script_match.group(1)
-                    # Try to extract profile name from the second parameter
-                    name_param_match = re.search(r'brave-profile-launcher\.sh\s+["\']?.*?["\']?\s+["\']?(.*?)["\']?(\s|$)', content)
-                    if name_param_match:
-                        profile_name = name_param_match.group(1)
-                
-                # 2. Check if it references a specific shell script with the launch-brave pattern
-                elif re.search(r'Exec=(.*/)?launch-brave-(.*?)-(.*?)\.sh', content):
-                    shell_script_match = re.search(r'Exec=(.*/)?launch-brave-(.*?)-(.*?)\.sh', content)
-                    is_profile_launcher = True
-                    script_profile_name = shell_script_match.group(2).replace("_", " ")
-                    script_profile_id = shell_script_match.group(3).replace("_", " ")
-                    profile_name = script_profile_name
-                    profile_id = script_profile_id
-                
-                # 3. Otherwise check for direct brave command with profile directory
-                elif "--profile-directory" in content:
-                    is_profile_launcher = True
-                    # Extract profile ID from command line
-                    cmd_match = re.search(r'--profile-directory=["\']?(.*?)["\']?(\s|$)', content)
-                    if cmd_match:
-                        profile_id = cmd_match.group(1)
-                
-                # Skip if not identified as a profile launcher
-                if not is_profile_launcher:
+                # Check if it's a profile launcher (contains --profile-directory)
+                if "--profile-directory" not in content:
                     continue
                 
-                # Extract profile name from Name field if not already set
-                if profile_name == "Unknown":
-                    name_match = re.search(r'Name=(.*?)(\n|$)', content)
-                    if name_match:
-                        full_name = name_match.group(1).strip()
-                        if " - " in full_name and full_name.lower().startswith("brave"):
-                            profile_name = full_name.split(" - ", 1)[1]
-                        else:
-                            profile_name = full_name
+                # Extract profile ID from command line
+                profile_id = "default"
+                cmd_match = re.search(r'--profile-directory=["\']?(.*?)["\']?(\s|$)', content)
+                if cmd_match:
+                    profile_id = cmd_match.group(1)
                 
-                # Check if it was created by our script
-                created_by_script = "brave-profile-launcher.sh" in content or "launch-brave-" in content or filename.startswith("brave-")
+                # Extract profile name from Name field
+                profile_name = "Unknown"
+                name_match = re.search(r'Name=(.*?)(\n|$)', content)
+                if name_match:
+                    full_name = name_match.group(1).strip()
+                    if " - " in full_name and full_name.lower().startswith("brave"):
+                        profile_name = full_name.split(" - ", 1)[1]
+                    else:
+                        profile_name = full_name
+                
+                # Check if it was created by our script (filename pattern)
+                created_by_script = filename.startswith("brave-")
                 
                 brave_desktop_files.append({
                     'filename': filename,
@@ -161,174 +133,11 @@ def find_brave_profile_launchers():
                     'created_by_script': created_by_script,
                     'is_system': False  # Never system files since we only look at ~/.local
                 })
-        except Exception as e:
+        except Exception:
             # Skip files we can't parse correctly
             continue
     
     return brave_desktop_files
-
-def check_wmctrl():
-    """Check if wmctrl is installed."""
-    return shutil.which("wmctrl") is not None
-
-def create_generic_launcher_script(scripts_dir, brave_path):
-    """Create a single generic launcher script that takes profile ID as a parameter."""
-    
-    script_filename = "brave-profile-launcher.sh"
-    script_path = scripts_dir / script_filename
-    
-    # Create the script content with improved window focusing - using multiple techniques
-    script_content = f"""#!/bin/bash
-
-# Generic Brave Profile Launcher
-# Usage: brave-profile-launcher.sh <profile_id> [profile_name]
-# This script will focus an existing Brave window with the specified profile
-# or launch a new one if none exists.
-
-PROFILE_ID="$1"
-PROFILE_NAME="$2"
-
-if [ -z "$PROFILE_ID" ]; then
-    echo "Error: Profile ID is required"
-    echo "Usage: $(basename "$0") <profile_id> [profile_name]"
-    exit 1
-fi
-
-# Function to check if a window exists and focus it
-focus_window() {{
-    local window_id="$1"
-    if [ -n "$window_id" ]; then
-        # Try multiple focusing techniques
-        wmctrl -ia "$window_id"
-        # Add small delay to ensure focus command completes
-        sleep 0.1
-        # Success - window found and focused
-        return 0
-    fi
-    return 1
-}}
-
-# Try to focus an existing Brave window with this profile
-if command -v wmctrl &> /dev/null; then
-    # Technique 1: Search by process ID
-    windows=$(wmctrl -lp)
-    brave_pids=$(pgrep -f "brave.*--profile-directory=$PROFILE_ID")
-    
-    if [ -n "$brave_pids" ]; then
-        for pid in $brave_pids; do
-            window_id=$(echo "$windows" | grep " $pid " | head -n 1 | awk '{{print $1}}')
-            if focus_window "$window_id"; then
-                exit 0
-            fi
-        done
-    fi
-
-    # Technique 2: Try to find by window class and title
-    if [ -n "$PROFILE_NAME" ]; then
-        # Get windows by class, then filter by title
-        brave_windows=$(wmctrl -lx | grep -i "brave-browser.Brave-browser")
-        if [ -n "$brave_windows" ]; then
-            # First try exact profile name match
-            window_id=$(echo "$brave_windows" | grep -i "$PROFILE_NAME" | head -n 1 | awk '{{print $1}}')
-            if focus_window "$window_id"; then
-                exit 0
-            fi
-        fi
-    fi
-    
-    # Technique 3: If profile ID is a number, try by window class and workspace
-    if [[ "$PROFILE_ID" =~ ^[0-9]+$ ]]; then
-        # Get all Brave windows and activate the first one
-        brave_windows=$(wmctrl -lx | grep -i "brave-browser.Brave-browser")
-        if [ -n "$brave_windows" ]; then
-            window_id=$(echo "$brave_windows" | head -n 1 | awk '{{print $1}}')
-            if focus_window "$window_id"; then
-                # Also show all workspaces to help user find windows
-                if command -v qdbus &> /dev/null; then
-                    # For KDE
-                    qdbus org.kde.KWin /KWin org.kde.KWin.showDesktop
-                elif command -v dbus-send &> /dev/null; then
-                    # For GNOME
-                    dbus-send --session --type=method_call --dest=org.gnome.Shell /org/gnome/Shell org.gnome.Shell.Eval string:'Main.overview.toggle();'
-                fi
-                sleep 0.2
-                exit 0
-            fi
-        fi
-    fi
-fi
-
-# None of the focusing techniques worked, or wmctrl is not installed
-# Launch a new instance of Brave with this profile
-exec "{brave_path}" --profile-directory="$PROFILE_ID"
-"""
-    
-    # Write the script file
-    try:
-        with open(script_path, 'w') as file:
-            file.write(script_content)
-        
-        # Make the script executable
-        os.chmod(script_path, 0o755)
-        return script_path
-    except Exception as e:
-        print(f"Error creating launcher script: {e}")
-        return None
-
-def create_launcher_script(profile_id, profile_name, brave_path, scripts_dir):
-    """Create a shell script to launch or focus a Brave profile."""
-    
-    # Generate a safe filename
-    safe_name = profile_name.replace(" ", "_").replace("/", "_").lower()
-    safe_id = str(profile_id).replace(" ", "_").replace("/", "_")
-    script_filename = f"launch-brave-{safe_name}-{safe_id}.sh"
-    script_path = scripts_dir / script_filename
-    
-    # Create the script content with improved window focusing
-    script_content = f"""#!/bin/bash
-
-# Script to launch or focus a specific Brave browser profile
-# Profile: {profile_name} (ID: {profile_id})
-
-# Check if wmctrl is installed
-if command -v wmctrl &> /dev/null; then
-    # Get list of all windows with detailed info
-    windows=$(wmctrl -lp)
-    
-    # Get PIDs of all Brave browser processes
-    brave_pids=$(pgrep -f "brave.*--profile-directory={profile_id}")
-    
-    # Check if we found any Brave windows with this profile
-    if [ -n "$brave_pids" ]; then
-        # Try to find and focus the window
-        for pid in $brave_pids; do
-            # Find windows belonging to this process
-            window_id=$(echo "$windows" | grep " $pid " | head -n 1 | awk '{{print $1}}')
-            if [ -n "$window_id" ]; then
-                # Found a window, activate it and move it to current workspace with -i option
-                wmctrl -ia "$window_id"
-                exit 0
-            fi
-        done
-    fi
-fi
-
-# Profile is not open or wmctrl couldn't find/focus the window
-# Launch a new instance
-exec "{brave_path}" --profile-directory="{profile_id}"
-"""
-    
-    # Write the script file
-    try:
-        with open(script_path, 'w') as file:
-            file.write(script_content)
-        
-        # Make the script executable
-        os.chmod(script_path, 0o755)
-        return script_path
-    except Exception as e:
-        print(f"Error creating launcher script: {e}")
-        return None
 
 def create_desktop_file(profile_id, profile_name, custom_title=None):
     """Create a Gnome desktop file for the specified Brave profile."""
@@ -368,10 +177,6 @@ def create_desktop_file(profile_id, profile_name, custom_title=None):
             print("Invalid path. Desktop file not created.")
             return False
     
-    # Create the scripts directory if it doesn't exist
-    scripts_dir = Path.home() / ".local" / "bin"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    
     # Create the desktop directory if it doesn't exist
     desktop_dir = Path.home() / ".local" / "share" / "applications"
     desktop_dir.mkdir(parents=True, exist_ok=True)
@@ -382,19 +187,8 @@ def create_desktop_file(profile_id, profile_name, custom_title=None):
     desktop_filename = f"brave-{safe_name}-{safe_id}.desktop"
     desktop_path = desktop_dir / desktop_filename
     
-    # Create or ensure existence of the generic launcher script
-    generic_script_path = scripts_dir / "brave-profile-launcher.sh"
-    if not generic_script_path.exists():
-        script_path = create_generic_launcher_script(scripts_dir, brave_path)
-        if not script_path:
-            # Fall back to using the brave executable directly if script creation fails
-            exec_command = f"{brave_path} --profile-directory=\"{profile_id}\""
-        else:
-            # Use generic script with profile ID parameter
-            exec_command = f"{script_path} \"{profile_id}\" \"{profile_name}\""
-    else:
-        # Use existing generic script with profile ID parameter
-        exec_command = f"{generic_script_path} \"{profile_id}\" \"{profile_name}\""
+    # Use the brave executable directly with the profile directory parameter
+    exec_command = f"{brave_path} --profile-directory=\"{profile_id}\""
     
     # Use custom title if provided, otherwise use default format
     title = custom_title if custom_title else f"Brave - {profile_name}"
@@ -425,28 +219,10 @@ Categories=Network;WebBrowser;
         print(f"Error creating desktop file: {e}")
         return False
 
-def remove_launcher_script(profile_id, profile_name):
-    """Remove the corresponding launcher script if it exists."""
-    # Format the profile name to match the script file naming
-    safe_name = profile_name.replace(" ", "_").replace("/", "_").lower()
-    safe_id = str(profile_id).replace(" ", "_").replace("/", "_")
-    script_filename = f"launch-brave-{safe_name}-{safe_id}.sh"
-    script_path = Path.home() / ".local" / "bin" / script_filename
-    
-    if script_path.exists():
-        try:
-            script_path.unlink()
-            print(f"Removed launcher script: {script_path}")
-            return True
-        except Exception as e:
-            print(f"Error removing launcher script: {e}")
-    
-    return False
-
 def remove_desktop_file(desktop_file_info):
-    """Remove a desktop file and its associated launcher script."""
+    """Remove a desktop file."""
     try:
-        # Check if we can remove the file (system files require sudo)
+        # Check if we can remove the file
         if desktop_file_info['is_system']:
             print(f"Warning: Cannot remove system file: {desktop_file_info['path']}")
             print("You would need sudo privileges to remove this file.")
@@ -455,11 +231,6 @@ def remove_desktop_file(desktop_file_info):
         # Remove the desktop file
         desktop_file_info['path'].unlink()
         print(f"Removed desktop file: {desktop_file_info['path']}")
-        
-        # Only try to remove the launcher script if it was created by our script
-        if desktop_file_info['created_by_script']:
-            remove_launcher_script(desktop_file_info['profile_id'], desktop_file_info['profile_name'])
-        
         return True
     except Exception as e:
         print(f"Error removing desktop file: {e}")
@@ -506,14 +277,6 @@ def create_launcher():
         wait_for_input()
         return
     
-    # Check if wmctrl is installed but don't block if missing
-    has_wmctrl = check_wmctrl()
-    if not has_wmctrl:
-        print("\nNOTE: The 'wmctrl' package is not installed. Window focusing across virtual desktops")
-        print("won't work. Desktop files will still be created, but each launch will open a new window.")
-        print("To enable window focusing, install wmctrl with your package manager.")
-        print("Example: sudo apt install wmctrl (Ubuntu/Debian)")
-    
     print("\nAvailable Brave Browser Profiles:")
     print("--------------------------------")
     for idx, (profile_id, name) in enumerate(profiles, 1):
@@ -538,7 +301,6 @@ def create_launcher():
             create_desktop_file(profile_id, name, custom_title)
             
         print("\nDesktop shortcuts created for all profiles.")
-        print("The shortcuts will focus existing windows if the profile is already open.")
         print("You may need to restart the shell or log out and back in for them to appear in the application menu.")
     else:
         try:
@@ -554,7 +316,6 @@ def create_launcher():
                 
                 if create_desktop_file(profile_id, name, custom_title):
                     print(f"\nDesktop shortcut created for '{name}' profile.")
-                    print("The shortcut will focus existing windows if the profile is already open.")
                     print("You may need to restart the shell or log out and back in for it to appear in the application menu.")
             else:
                 print("Invalid selection. No desktop file created.")
@@ -626,6 +387,10 @@ def manage_launchers():
             print(f"\nRemoved {removed_count} of {len(script_created_files)} Brave profile launchers.")
         else:
             print("Operation cancelled. No changes made.")
+    
+    elif choice == '3':
+        # Return directly to main menu without waiting for input
+        return
     
     wait_for_input()
 

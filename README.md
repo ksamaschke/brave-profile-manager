@@ -1,13 +1,14 @@
 # Brave Profile Manager
 
-A comprehensive tool for managing Brave browser profiles and creating desktop launchers for each profile.
+Managing Brave Profiles together with .desktop Files on Linux sucks, as Brave does not use the names of the profiles in any file-names or other easily identifyable means. So if one wanted to create a dedicated .desktop-File to launch into a certain Brave Profile, this simply would not work, unless I did a lot of research.
+
+Or unless I used this script.
 
 ## Features
 
 - List all Brave browser profiles with their IDs and names
 - Create desktop shortcuts for individual profiles or all profiles at once
 - Add custom titles to desktop shortcuts
-- Focus existing windows when launching a profile that's already open (when wmctrl is installed)
 - Manage (view and remove) existing profile launchers
 
 ## Requirements
@@ -15,7 +16,6 @@ A comprehensive tool for managing Brave browser profiles and creating desktop la
 - Linux operating system with a desktop environment (tested on GNOME)
 - Python 3.6 or higher
 - Brave browser installed and run at least once
-- `wmctrl` package (optional but recommended for window focusing functionality)
 
 ## Installation
 
@@ -30,22 +30,6 @@ A comprehensive tool for managing Brave browser profiles and creating desktop la
    chmod +x brave_profile_manager.py
    ```
 
-3. Install the optional dependency for window focusing (recommended):
-   ```
-   # Ubuntu/Debian
-   sudo apt-get install wmctrl
-   
-   # Fedora
-   sudo dnf install wmctrl
-   
-   # Arch Linux
-   sudo pacman -S wmctrl
-   
-   # openSUSE
-   sudo zypper install wmctrl
-   ```
-   Note: Without wmctrl, the script will still create launchers but they won't be able to focus existing windows.
-
 ## Usage
 
 Run the main script:
@@ -54,9 +38,9 @@ Run the main script:
 ```
 
 The script presents a menu with the following options:
-1. **List Brave Profiles** - Shows all available Brave profiles
+1. **Manage Profile Launchers** - Lists and allows removal of existing launchers
 2. **Create Profile Launcher** - Creates desktop shortcuts for selected profiles
-3. **Manage Profile Launchers** - Lists and allows removal of existing launchers
+3. **List Brave Profiles** - Shows all available Brave profiles
 4. **Exit** - Exits the program
 
 ### Creating Profile Launchers
@@ -80,32 +64,7 @@ The management option allows you to:
 The script works by:
 1. Reading Brave's `Local State` file to identify available profiles
 2. Creating desktop files (.desktop) in the standard Linux applications directory
-3. Creating a single generic helper script in `~/.local/bin/` to handle window focusing
-4. Using wmctrl (if installed) to focus existing windows instead of launching new ones
-
-### Generic Helper Script for Window Focusing
-
-The script creates a single generic helper script (`brave-profile-launcher.sh`) in `~/.local/bin/` that:
-
-- Takes two parameters: `<profile_id>` and optionally `<profile_name>`
-- Checks if a Brave window with the specified profile is already running
-- Focuses the existing window if found (including windows on other virtual desktops)
-- Launches a new instance of the profile if no existing window is found
-
-This approach:
-- Minimizes file system clutter by using a single script for all profiles
-- Makes the script parameters easily identifiable in desktop files
-- Enables robust window detection across virtual desktops based on process IDs
-
-### Note on Virtual Desktops and Window Focusing
-
-The window focusing feature attempts to find and focus Brave windows across different virtual desktops, but its effectiveness may vary based on:
-
-- Your desktop environment (GNOME, KDE, etc.)
-- How Brave manages its windows and processes
-- Window state (minimized, on different workspaces)
-
-The script employs multiple window-finding techniques, but there may be cases where a new window is opened instead of focusing an existing one. This is a limitation of how window managers and browsers interact rather than a bug in the script.
+3. Each desktop file directly launches Brave with the appropriate profile parameter
 
 ## License
 
