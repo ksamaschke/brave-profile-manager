@@ -15,7 +15,7 @@ A comprehensive tool for managing Brave browser profiles and creating desktop la
 - Linux operating system with a desktop environment (tested on GNOME)
 - Python 3.6 or higher
 - Brave browser installed and run at least once
-- `wmctrl` package (optional, but recommended for window focusing)
+- `wmctrl` package (required for window focusing functionality)
 
 ## Installation
 
@@ -30,7 +30,7 @@ A comprehensive tool for managing Brave browser profiles and creating desktop la
    chmod +x brave_profile_manager.py
    ```
 
-3. Install the recommended dependency:
+3. Install the required dependency:
    ```
    # Ubuntu/Debian
    sudo apt-get install wmctrl
@@ -80,15 +80,7 @@ The script works by:
 1. Reading Brave's `Local State` file to identify available profiles
 2. Creating desktop files (.desktop) in the standard Linux applications directory
 3. Creating helper scripts in `~/.local/bin/` to handle window focusing
-4. Using wmctrl (if available) to focus existing windows instead of launching new ones
-
-## Individual Scripts
-
-The repository also includes individual scripts in the `scripts/` directory if you prefer using them directly:
-
-- `list_brave_profiles.py` - Lists all Brave profiles
-- `create_brave_profile_launcher.py` - Creates desktop launchers
-- `manage_brave_launchers.py` - Manages existing launchers
+4. Using wmctrl to focus existing windows instead of launching new ones
 
 ## License
 
