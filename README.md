@@ -1,6 +1,8 @@
 # Brave Profile Manager
 
-Managing Brave Profiles together with .desktop Files on Linux sucks, as Brave does not use the names of the profiles in any file-names or other easily identifyable means. So if one wanted to create a dedicated .desktop-File to launch into a certain Brave Profile, this simply would not work, unless I did a lot of research.
+Managing Brave Profiles together with .desktop Files on Linux sucks, as Brave does not use the names of the profiles in any file-names or other easily identifyable means. 
+
+So if I wanted to create a dedicated .desktop-File to launch into a certain Brave Profile, this simply would not work, unless I did a lot of research.
 
 Or unless I used this script.
 
@@ -21,7 +23,7 @@ Or unless I used this script.
 
 1. Clone this repository or download the files:
    ```
-   git clone https://github.com/yourusername/brave-profile-manager.git
+   git clone https://github.com/ksamaschke/brave-profile-manager.git
    cd brave-profile-manager
    ```
 
